@@ -1,0 +1,422 @@
+---
+title: "Análise Epidemiológica – IC Augusto"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: c
+    vertical_layout: fill
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(shiny)
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(plotly)
+
+```
+
+```{r}
+DadosD <- reactive({
+        read_excel("DadosD.xlsx")
+    })
+
+municipios <- reactive({
+        municipios = unique(DadosD()$muni)
+    })
+
+
+```
+
+
+Casos em população indígena no Mato Grosso do Sul
+==========
+
+
+
+```{r}
+renderUI(
+        selectInput("muni_selecionado", "Filtrar por município:", 
+            choices = municipios(),
+            selected = c("DOURADOS","AMAMBAI","MIRANDA","NIOAQUE","CAARAPO"),
+            multiple = TRUE)
+)
+
+        selectInput("ano_selecionado", "Filtrar por ano:", 
+            choices = c("Todos", 2017:2024),
+            selected = "Todos")
+
+
+```
+
+Column {data-width=500} {.tabset}
+-----------------------------------------------------------------------
+
+### Distribuição de casos por município
+
+```{r}
+renderPlotly({
+  # Filtro Combinado (Município + Ano)
+  df_filtrado <- DadosD() %>%
+    filter(muni %in% input$muni_selecionado)
+  
+  if (input$ano_selecionado != "Todos") {
+    df_filtrado <- df_filtrado %>% 
+      filter(ano_doenca == as.numeric(input$ano_selecionado))
+  }
+  
+  df_plot_A <- df_filtrado %>%
+    group_by(muni, doenca) %>%
+    summarise(casos = sum(casos, na.rm = TRUE), .groups = "drop")
+
+ p1 <- ggplot(df_plot_A, aes(y = reorder(muni, casos), x = casos, fill = doenca)) +
+    geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+    scale_fill_brewer(palette = "Set2", labels = c("Chikungunya", "Dengue", "Zika")) +
+    labs(x = "Total de notificações registradas", y = NULL, fill = "Doença") +
+    theme_minimal(base_size = 12) +
+    theme(legend.position = "top")
+
+ 
+ ggplotly(p1)
+ 
+ 
+ })
+
+
+```
+
+### Dados
+
+```{r}
+renderTable({
+  df_filtrado <- DadosD() %>%
+    filter(muni %in% input$muni_selecionado)
+  
+  if (input$ano_selecionado != "Todos") {
+    df_filtrado <- df_filtrado %>% 
+      filter(ano_doenca == as.numeric(input$ano_selecionado))
+  }
+  
+  df_plot_A <- df_filtrado %>%
+    group_by(muni, doenca) %>%
+    summarise(casos = sum(casos, na.rm = TRUE), .groups = "drop")
+  
+
+  df_plot_A
+  
+  
+  })
+
+```
+
+Column {data-width=500} {.tabset}
+-----------------------------------------------------------------------
+
+### Evolução anual dos casos nos municípios selecionados
+
+```{r}
+renderPlotly({
+  
+  dados_filtrados <- DadosD() %>%
+    filter(muni %in% input$muni_selecionado)
+
+      dados_somados <- dados_filtrados %>%
+        group_by(ano_doenca, doenca) %>%
+        summarise(casos = sum(casos), .groups = "drop")
+      
+ p2<- ggplot(dados_somados,
+       aes(x = ano_doenca, y = casos, color = doenca)) +
+  geom_line(size = 1.2) +
+  geom_point(size = 2) +
+  theme(
+    legend.position = "top"
+  ) +
+    labs(x = "Distribuição anual das notificações", y = NULL, fill = "Doença") +
+    theme_minimal(base_size = 12) +
+    theme(legend.position = "top")
+  
+ ggplotly(p2)
+ 
+})
+
+
+```
+
+### Dados
+
+```{r}
+renderTable({
+  
+   dados_filtrados <- DadosD() %>%
+    filter(muni %in% input$muni_selecionado)
+
+      dados_somados <- dados_filtrados %>%
+        group_by(ano_doenca, doenca) %>%
+        summarise(casos = sum(casos), .groups = "drop")
+      
+  dados_somados    
+
+  
+})
+```
+
+Clima nas terras indigenas 
+=================
+
+```{r}
+DadosClimaVertical <- reactive({
+        read_excel("DadosClimaVertical.xlsx")
+    })
+
+TerrasIndigenas <- reactive({
+          TerrasIndigenas = unique(DadosClimaVertical()$terrai_nom)
+})
+
+Dados_Filtro <- reactive({
+          Dados_Filtro <- DadosClimaVertical() %>% 
+                filter(YEAR == input$ano_selecionadoClima,
+                terrai_nom == input$terra_indigena_selecionado
+         )
+})
+
+Descritivos <- reactive({
+          Descritivos <- Dados_Filtro() %>% summarise(
+            Tminimo = min(Tmin),
+            Tmaxima = max(TMax),
+            Cmaxima = max(chuva),
+            Cminima = min(chuva),
+            Cmedia =  mean(chuva)
+          )
+})
+
+
+```
+
+
+```{r}
+
+renderUI(
+        selectInput("terra_indigena_selecionado", "Filtrar por Terra Indígena:", 
+            choices = TerrasIndigenas())
+)
+
+        selectInput("ano_selecionadoClima", "Filtrar por Ano:", 
+            choices = 2017:2024)
+
+
+```
+
+
+
+colunn {data-width=500} {.tabset}
+-------------------------------------
+### Grafico
+
+
+```{r}
+renderPlotly({
+  
+  df <- Dados_Filtro()
+  
+  df$mes <- factor(
+  df$mes,
+  levels = c("janeiro", "fevereiro", "março", "abril", "maio", "junho",
+            "julho", "agosto", "setembro", "outubro", "novembro", "dezembro")
+)
+
+p3 <- ggplot(df, aes(x = mes)) +
+  geom_col(aes(y = chuva, fill = "Precipitação"),
+           alpha = 0.7) +
+  geom_line(aes(y = TMax, color = "Temperatura Máxima", group = 1),
+            linewidth = 1) +
+  geom_line(aes(y = Tmin, color = "Temperatura Mínima", group = 1),
+            linewidth = 1) +
+  scale_fill_manual(
+    name = "",
+    values = c("Precipitação" = "steelblue")
+  ) +
+  scale_color_manual(
+    name = "",
+    values = c("Temperatura Máxima" = "red",
+               "Temperatura Mínima" = "orange")
+  ) +
+  scale_y_continuous(
+    name = "Precipitação média mensal (mm)",
+    sec.axis = sec_axis(~ .,
+                        name = "Média mensal de temperatura (°C)")
+  ) +
+  labs(
+    x = "Mês",
+    title = paste(" Precipitação média associada às temperaturas mínima e máxima –", input$ano_selecionadoClima)
+  ) +
+  theme_minimal()
+
+  ggplotly(p3)
+})
+
+```
+
+### dados
+
+```{r}
+renderTable({
+  Dados_Filtro()
+  
+})
+  
+
+```
+
+colunn {data-width=200}
+-------------------------------------
+
+###
+
+```{r}
+
+renderValueBox({
+  Tminima = Descritivos()$Tminimo
+  valueBox(Tminima, caption = "Temperatura mínima da média anual", icon = "fa-balance-scale", color = "#AEC6CF")
+})
+
+```
+
+###
+
+```{r}
+
+renderValueBox({
+  Tmaxima = Descritivos()$Tmaxima
+  valueBox(Tmaxima, caption = "Temperatura máxima da média anual", icon = "fa-balance-scale", color = "#AEC6CF")
+})
+
+```
+
+###
+
+```{r}
+
+renderValueBox({
+  Cminima = Descritivos()$Cminima
+  valueBox(Cminima, caption = "Menor média anual de precipitação", icon = "fa-balance-scale", color = "#AEC6CF")
+})
+
+```
+
+###
+
+```{r}
+
+renderValueBox({
+  Cmedia =  round( Descritivos()$Cmedia, 2)
+  valueBox(Cmedia, caption = "Precipitação média anual", icon = "fa-balance-scale", color = "#AEC6CF")
+})
+
+```
+
+###
+
+```{r}
+
+renderValueBox({
+  Cmaxima = Descritivos()$Cmaxima
+  valueBox(Cmaxima, caption = "Maior média anual de precipitação", icon = "fa-balance-scale", color = "#AEC6CF")
+})
+
+```
+
+
+Sobre
+======================================
+
+Row
+-------------------------------------
+    
+### 
+
+```{r}
+tags$div(
+    style = "display: flex; flex-direction: column; align-items: center; gap: 20px; width: 80%; margin: 20px auto;",
+    
+    
+      
+  tags$div(
+    style = "display: flex; align-items: center; width: 100%; border: 1px solid black; padding: 10px; background: #D6EAF8;",
+    
+    
+   # tags$img(src = "logo1.png", style = "width: 100px; height: auto;"),
+    
+    
+ #   tags$img(src = "logoestado.png", style = "width: 180px; height: auto;"),
+    
+    
+    tags$p(
+      "Este trabalho recebeu apoio da FUNDECT (TO 453/2024)",
+      style = "margin: 0 20px; text-align: center; font-size: 18px; font-family: Arial, sans-serif; font-weight: bold;"
+    ),
+    
+    
+  ),
+   
+    
+  tags$div(
+      style = "display: flex; flex-wrap: wrap; align-items: center; width: 100%; border: 1px solid black; padding: 20px;background: #AEC6CF;",
+      
+      tags$div(
+        style = "width: 150px; height: 200px; border: 1px solid black; display: flex; align-items: center; justify-content: center; margin-right: 20px; overflow: hidden;",
+        tags$img(src = "Augusto.jpeg", style = "width: 100%; height: 100%; object-fit: cover;")
+      ),
+      
+      tags$div(
+        style = "font-family: Arial, sans-serif; flex: 1; min-width: 200px;",
+        tags$p(tags$strong("Augusto Marques Martins ")),
+        tags$p("Universidade Federal da Grande Dourados - ", tags$strong("UFGD")),
+        tags$p("E-mail: augustomatos1309@gmail.com"),
+        tags$p(tags$a(href = "http://lattes.cnpq.br/0623916878256249", "Lattes"))
+      )
+    ),
+  
+  
+  
+  
+  tags$div(
+      style = "display: flex; flex-wrap: wrap; align-items: center; width: 100%; border: 1px solid black; padding: 20px;background: #AEC6CF;",
+      
+      tags$div(
+        style = "width: 150px; height: 200px; border: 1px solid black; display: flex; align-items: center; justify-content: center; margin-right: 20px; overflow: hidden;",
+        tags$img(src = "elias1.jpeg", style = "width: 100%; height: 100%; object-fit: cover;")
+      ),
+      
+      tags$div(
+        style = "font-family: Arial, sans-serif; flex: 1; min-width: 200px;",
+        tags$p(tags$strong("Elias Silva de Medeiros ")),
+        tags$p("Universidade Federal da Grande Dourados - ", tags$strong("UFGD")),
+        tags$p("E-mail: eliasmedeiros@ufgd.edu.br"),
+        tags$p(tags$a(href = "https://lattes.cnpq.br/5052910988468793", "Lattes"))
+      )
+    ),
+  
+  
+  
+    
+    tags$div(
+      style = "display: flex; flex-wrap: wrap; align-items: center; width: 100%; border: 1px solid black; padding: 20px;background: #AEC6CF;",
+      
+      tags$div(
+        style = "width: 150px; height: 200px; border: 1px solid black; display: flex; align-items: center; justify-content: center; margin-right: 20px; overflow: hidden;",
+        tags$img(src = "patrick.jpeg", style = "width: 100%; height: 100%; object-fit: cover;")
+      ),
+      
+      tags$div(
+        style = "font-family: Arial, sans-serif; flex: 1; min-width: 200px;",
+        tags$p(tags$strong("Patrick Eduardo Zanon Maciel")),
+        tags$p("Universidade Federal da Grande Dourados - ", tags$strong("UFGD")),
+        tags$p("E-mail: patrickeduardozanonmaciel@gmail.com"),
+        tags$p(tags$a(href = "http://lattes.cnpq.br/5571160351695077", "Lattes"))
+      )
+    )
+  )
+
+``` 
+
